@@ -25,9 +25,9 @@
 [submodule "third_party/tools/zachjs-sv2v"]
 	path = third_party/tools/zachjs-sv2v
 	url = https://github.com/zachjs/sv2v
-[submodule "third_party/cores/swerv"]
-	path = third_party/cores/swerv
-	url = https://github.com/chipsalliance/Cores-SweRV
+[submodule "third_party/cores/veer-eh1"]
+	path = third_party/cores/veer-eh1
+	url = https://github.com/chipsalliance/Cores-VeeR-EH1
 [submodule "third_party/cores/ibex"]
 	path = third_party/cores/ibex
 	url = https://github.com/lowRISC/ibex
@@ -68,9 +68,6 @@
 [submodule "third_party/tests/uvm"]
 	path = third_party/tests/uvm
 	url = https://github.com/SymbiFlow/uvm.git
-[submodule "third_party/cores/ibex-yosys-build"]
-	path = third_party/cores/ibex-yosys-build
-	url = https://github.com/SymbiFlow/ibex-yosys-build.git
 [submodule "third_party/cores/tnoc"]
 	path = third_party/cores/tnoc
 	url = https://github.com/taichi-ishitani/tnoc.git
@@ -80,12 +77,31 @@
 [submodule "third_party/tests/axi-vip"]
 	path = third_party/tests/axi-vip
 	url = https://github.com/SymbiFlow/axi-vip.git
-[submodule "third_party/tools/yosys-uhdm-plugin-integration"]
-	path = third_party/tools/yosys-uhdm-plugin-integration
-	url = https://github.com/antmicro/yosys-uhdm-plugin-integration.git
+[submodule "third_party/tools/synlig"]
+	path = third_party/tools/synlig
+	url = https://github.com/chipsalliance/synlig.git
 [submodule "third_party/tests/projf-explore"]
 	path = third_party/tests/projf-explore
 	url = https://github.com/projf/projf-explore.git
 [submodule "third_party/tools/verilator-uhdm"]
 	path = third_party/tools/verilator-uhdm
 	url = https://github.com/antmicro/verilator
+[submodule "third_party/tools/moore"]
+	path = third_party/tools/moore
+	url = https://github.com/fabianschuiki/moore.git
+[submodule "third_party/cores/rggen-sample"]
+	path = third_party/cores/rggen-sample
+	url = https://github.com/rggen/rggen-sample.git
+[submodule "third_party/cores/rggen-sv-rtl"]
+	path = third_party/cores/rggen-sv-rtl
+	url = https://github.com/rggen/rggen-sv-rtl.git
+[submodule "third_party/cores/veer-el2"]
+	path = third_party/cores/veer-el2
+	url = https://github.com/chipsalliance/Cores-VeeR-EL2.git
+[submodule "third_party/tools/yosys-slang"]
+	path = third_party/tools/yosys-slang
+	url = https://github.com/povik/yosys-slang.git
+[submodule "third_party/tools/circt-verilog"]
+	path = third_party/tools/circt-verilog
+	url = https://github.com/llvm/circt.git
+	branch = main

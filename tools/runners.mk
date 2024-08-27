@@ -10,6 +10,7 @@ INSTALL_DIR := $(abspath $(OUT_DIR)/runners/)
 
 RDIR := $(abspath third_party/tools)
 TDIR := $(abspath tools)
+CDIR := $(abspath conf)
 
 .PHONY: runners
 
@@ -26,14 +27,7 @@ $(INSTALL_DIR)/bin/odin_II:
 yosys: $(INSTALL_DIR)/bin/yosys
 
 $(INSTALL_DIR)/bin/yosys:
-	$(MAKE) -C $(RDIR)/yosys PREFIX=$(INSTALL_DIR) install
-
-# antmicro-yosys
-antmicro-yosys: $(INSTALL_DIR)/bin/antmicro-yosys
-
-$(INSTALL_DIR)/bin/antmicro-yosys:
-	$(MAKE) -C $(RDIR)/../cores/ibex-yosys-build/yosys ENABLE_TCL=0 ENABLE_ABC=0 ENABLE_GLOB=0 ENABLE_PLUGINS=0 ENABLE_READLINE=0 ENABLE_COVER=0
-	install -D $(RDIR)/../cores/ibex-yosys-build/yosys/yosys $@
+	$(MAKE) -C $(RDIR)/yosys CONFIG=gcc PREFIX=$(INSTALL_DIR) install
 
 # icarus
 icarus: $(INSTALL_DIR)/bin/iverilog
@@ -96,26 +90,15 @@ $(INSTALL_DIR)/bin/verilator-uhdm:
 	cp -r $(RDIR)/verilator-uhdm/image/* $(INSTALL_DIR)
 	mv $(INSTALL_DIR)/bin/verilator $(INSTALL_DIR)/bin/verilator-uhdm
 
-# surelog-uhdm-yosys
-yosys-uhdm: $(INSTALL_DIR)/bin/yosys-uhdm
+# yosys-synlig
+yosys-synlig: $(INSTALL_DIR)/bin/yosys-synlig
 
-$(INSTALL_DIR)/bin/yosys-uhdm:
-	mkdir -p $(INSTALL_DIR)
-	cd $(RDIR)/yosys-uhdm-plugin-integration && ./build_binaries.sh
-	cp -r $(RDIR)/yosys-uhdm-plugin-integration/image/* $(INSTALL_DIR)
-	mv $(INSTALL_DIR)/bin/yosys $(INSTALL_DIR)/bin/yosys-uhdm
-
-# vanilla-yosys-uhdm-plugin
-vanilla-yosys-uhdm-plugin: $(INSTALL_DIR)/bin/vanilla-yosys-uhdm-plugin
-
-$(INSTALL_DIR)/bin/vanilla-yosys-uhdm-plugin: yosys
+$(INSTALL_DIR)/bin/yosys-synlig:
 	mkdir -p $(INSTALL_DIR)
 	(export PATH=$(INSTALL_DIR)/bin/:${PATH} && \
-		export INSTALL_PATH=$(INSTALL_DIR) && \
-		export BUILD_UPSTREAM=1 && \
-		cd $(RDIR)/yosys-uhdm-plugin-integration && \
-		./build_binaries.sh --skip-yosys)
-	mv $(INSTALL_DIR)/bin/yosys $(INSTALL_DIR)/bin/vanilla-yosys-uhdm-plugin
+		cd $(RDIR)/synlig && \
+		$(MAKE) -rR -Oline install CFG_OUT_DIR=$(INSTALL_DIR)/)
+	mv $(INSTALL_DIR)/bin/yosys $(INSTALL_DIR)/bin/yosys-synlig
 
 # sv-parser
 sv-parser: $(INSTALL_DIR)/bin/parse_sv
@@ -127,18 +110,69 @@ $(INSTALL_DIR)/bin/parse_sv:
 # moore
 moore: $(INSTALL_DIR)/bin/moore
 
-$(INSTALL_DIR)/bin/moore:
-	cargo install --git "https://github.com/fabianschuiki/moore" --root $(INSTALL_DIR) --bin moore
+$(INSTALL_DIR)/bin/moore: $(RDIR)/moore/Cargo.lock
+	(export CARGO_NET_GIT_FETCH_WITH_CLI=true && \
+        cargo install --locked --path $(RDIR)/moore --root $(INSTALL_DIR) --bin moore)
+
+$(RDIR)/moore/Cargo.lock: $(CDIR)/runners/Cargo.lock
+	cp -f $(CDIR)/runners/Cargo.lock $(RDIR)/moore/Cargo.lock
 
 # verible
 verible:
-	cd $(RDIR)/verible/ && bazel run :install --noshow_progress -c opt -- $(INSTALL_DIR)/bin
+	cd $(RDIR)/verible/ && bazel run :install --noshow_progress --//bazel:use_local_flex_bison -c opt -- $(INSTALL_DIR)/bin && bazel shutdown
 
 $(INSTALL_DIR)/bin/verible-verilog-kythe-extractor: verible
 
 $(INSTALL_DIR)/bin/verilog_syntax: verible
 
+# yosys-slang
+yosys-slang: $(INSTALL_DIR)/bin/yosys-slang
+
+$(INSTALL_DIR)/bin/slang-yosys $(INSTALL_DIR)/bin/slang-yosys-config:
+	$(MAKE) -C $(RDIR)/yosys CONFIG=gcc CXXSTD=c++20 ENABLE_ABC=0 \
+				PROGRAM_PREFIX=slang- PREFIX=$(INSTALL_DIR) install
+
+$(INSTALL_DIR)/bin/yosys-slang: $(INSTALL_DIR)/bin/slang-yosys-config
+	mkdir -p $(INSTALL_DIR)
+	(export PATH=$(INSTALL_DIR)/bin/:${PATH} && \
+		cd $(RDIR)/yosys-slang && \
+		TARGET=$(INSTALL_DIR)/share/slang-yosys/plugins/slang.so YOSYS_PREFIX=slang- ./build.sh)
+	# copy slang-yosys, which was the result of compiling yosys with PROGRAM_PREFIX=slang-,
+	# to yosys-slang, which is the executable registered in tools/runners/yosys_slang.py
+	cp $(INSTALL_DIR)/bin/slang-yosys $(INSTALL_DIR)/bin/yosys-slang
+
+# circt-verilog
+circt-verilog: $(INSTALL_DIR)/bin/circt-verilog
+
+$(INSTALL_DIR)/bin/circt-verilog:
+	mkdir -p $(RDIR)/circt-verilog/build && \
+	mkdir -p $(RDIR)/circt-verilog/llvm/build && \
+	cd $(RDIR)/circt-verilog/llvm/build && \
+	cmake ../llvm \
+	    -G Ninja \
+	    -DCMAKE_BUILD_TYPE=Release \
+	    -DLLVM_USE_LINKER=lld \
+	    -DLLVM_CCACHE_BUILD=ON \
+	    -DCMAKE_C_COMPILER=clang \
+	    -DCMAKE_CXX_COMPILER=clang++ \
+	    -DLLVM_ENABLE_PROJECTS="mlir" \
+	    -DLLVM_INSTALL_UTILS=ON \
+	    -DLLVM_OPTIMIZED_TABLEGEN=ON \
+	    -DLLVM_TARGETS_TO_BUILD="host" && \
+	ninja && cd $(RDIR)/circt-verilog/build && \
+	cmake .. \
+	    -G Ninja \
+	    -DCMAKE_BUILD_TYPE=Release \
+	    -DLLVM_USE_LINKER=lld \
+	    -DCMAKE_C_COMPILER=clang \
+	    -DCMAKE_CXX_COMPILER=clang++ \
+	    -DMLIR_DIR=$(RDIR)/circt-verilog/llvm/build/lib/cmake/mlir \
+	    -DLLVM_DIR=$(RDIR)/circt-verilog/llvm/build/lib/cmake/llvm \
+	    -DCIRCT_SLANG_FRONTEND_ENABLED=ON \
+	    -DCMAKE_INSTALL_PREFIX=$(INSTALL_DIR) && \
+	ninja && ninja install
+
 # setup the dependencies
-RUNNERS_TARGETS := odin yosys icarus verilator slang zachjs-sv2v tree-sitter-verilog sv-parser moore verible surelog antmicro-yosys yosys-uhdm vanilla-yosys-uhdm-plugin verilator-uhdm
+RUNNERS_TARGETS := odin yosys icarus verilator slang zachjs-sv2v tree-sitter-verilog sv-parser moore verible surelog yosys-synlig verilator-uhdm circt-verilog
 .PHONY: $(RUNNERS_TARGETS)
 runners: $(RUNNERS_TARGETS)

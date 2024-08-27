@@ -17,19 +17,37 @@ from BaseRunner import BaseRunner
 class Yosys(BaseRunner):
     def __init__(self):
         super().__init__(
-            "yosys", "yosys", {"preprocessing", "parsing", "elaboration"})
+            "yosys", "yosys", {
+                "preprocessing", "parsing", "elaboration", "simulation",
+                "simulation_without_run"
+            })
 
-        self.url = "https://github.com/YosysHQ/yosys"
+        self.submodule = "third_party/tools/yosys"
+        self.url = f"https://github.com/YosysHQ/yosys/tree/{self.get_commit()}"
+
+    def get_mode(self, params):
+        unsynthesizable = int(params['unsynthesizable'])
+        if unsynthesizable:
+            return None
+        return super().get_mode(params)
 
     def prepare_run_cb(self, tmp_dir, params):
         run = os.path.join(tmp_dir, "run.sh")
         scr = os.path.join(tmp_dir, 'scr.ys')
         mode = params['mode']
         defer = ""
-        if mode != "elaboration":
+        if mode in ["preprocessing", "parsing"]:
             defer = "-defer"
 
-        top = self.get_top_module_or_guess(params)
+        nodisplay = ""
+        if mode in ["simulation", "simulation_without_run"]:
+            nodisplay = "-nodisplay"
+
+        top = params['top_module'] or None
+        if (top is not None):
+            top_opt = "-top \\{top}"
+        else:
+            top_opt = "-auto-top"
 
         inc = ""
         for incdir in params['incdirs']:
@@ -42,20 +60,23 @@ class Yosys(BaseRunner):
         # prepare yosys script
         with open(scr, 'w') as f:
             for svf in params['files']:
-                f.write(f'read_verilog {defer} -sv {inc} {defs} {svf}\n')
+                f.write(
+                    f'read_verilog {defer} -sv {nodisplay} {inc} {defs} {svf}\n'
+                )
 
-            if mode == "elaboration":
+            if mode not in ["preprocessing", "parsing"]:
                 # prep (without optimizations)
                 f.write(
-                    f"hierarchy -top \\{top}\n"
+                    f"hierarchy {top_opt}\n"
                     "proc\n"
                     "check\n"
+                    "clean\n"
                     "memory_dff\n"
                     "memory_collect\n"
                     "stat\n"
-                    "check\n"
-                    "write_json\n"
-                    "write_verilog\n")
+                    "check\n")
+            if mode in ['simulation', 'simulation_without_run']:
+                f.write("sim -assert\n")
 
         # prepare wrapper script
         with open(run, 'w') as f:

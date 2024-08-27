@@ -10,7 +10,9 @@
 /*
 :name: aborting_productions_break_and_return_0
 :description: break statement test
+:type: simulation elaboration parsing
 :tags: 18.17.6
+:unsynthesizable: 1
 */
 
 function int F();
@@ -26,3 +28,11 @@ function int F();
     endsequence
     return x;
 endfunction
+
+module top;
+   int x;
+   initial begin
+      x = F();
+      $display(":assert: (10 == %d)", x);
+   end
+endmodule

@@ -10,7 +10,9 @@
 /*
 :name: random_sequence_generation_randsequence_2
 :description: randsequence test
+:type: simulation elaboration parsing
 :tags: 18.17
+:unsynthesizable: 1
 */
 
 function int F();
@@ -22,3 +24,11 @@ function int F();
     endsequence
     return x;
 endfunction
+
+module top;
+   int x;
+   initial begin
+      x = F();
+      if (x != 2 && x != -2) $stop;
+   end
+endmodule

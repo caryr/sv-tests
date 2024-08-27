@@ -10,11 +10,14 @@
 /*
 :name: case_production_statements_0
 :description: randcase case statement test
+:type: simulation elaboration parsing
 :tags: 18.17.3
+:unsynthesizable: 1
 */
 
 function int F();
-    int x, switch;
+    int x;
+    int switch = 1;
     randsequence( main )
       main : case (switch)
           0 : zero;
@@ -30,3 +33,11 @@ function int F();
 
     return x;
 endfunction
+
+module top;
+   int x;
+   initial begin
+      x = F();
+      $display(":assert: (10 == %d)", x);
+   end
+endmodule

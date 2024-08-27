@@ -113,7 +113,7 @@ test = os.path.abspath(os.path.join(dirs['tests'], args.test))
 supported_test_params = [
     "name", "tags", "description", "files", "incdirs", "top_module", "timeout",
     "type", "should_fail", "should_fail_because", "defines",
-    "compatible-runners"
+    "compatible-runners", "unsynthesizable", "results_group"
 ]
 
 test_params = {}
@@ -158,6 +158,8 @@ try:
             test_params.setdefault('should_fail_because', "")
             test_params.setdefault('defines', "")
             test_params.setdefault('compatible-runners', "all")
+            test_params.setdefault('unsynthesizable', '0')
+            test_params.setdefault('results_group', "")
 
             if len(set(supported_test_params) - set(test_params.keys())) != 0:
                 missing = list(
@@ -187,8 +189,7 @@ test_params['incdirs'] = list(
         lambda x: os.path.abspath(os.path.join(dirs['tests'], x)),
         test_params['incdirs'].split()))
 
-test_params['mode'] = runner_obj.get_mode(
-    test_params['type'].split(), test_params['compatible-runners'].split())
+test_params['mode'] = runner_obj.get_mode(test_params)
 if test_params['mode'] is None:
     logger.info("Skipping {}/{}".format(args.runner, args.test))
     with open(out, "w") as f:
@@ -221,8 +222,22 @@ for f in test_params['files']:
 
 test_params['files'] = filtered_files
 
+# Keep it simple to avoid problems with escaping.
+RESULTS_GROUP_PARAM_VALIDATOR_RE = re.compile(r"[a-z0-9_]*")
+if not RESULTS_GROUP_PARAM_VALIDATOR_RE.fullmatch(
+        test_params["results_group"]):
+    group = test_params["results_group"]
+    fixed_group = re.sub("[^a-z0-9_]", "_", group.lower())
+    logger.warning(
+        f"results_group '{group}' does not match pattern '[a-z0-9_]*'. Replacing with '{fixed_group}'."
+    )
+    test_params['results_group'] = fixed_group
+
 try:
-    tmp_dir = tempfile.mkdtemp()
+    tmp_parent = os.path.join(os.path.abspath(dirs['out']), "tmp")
+    os.makedirs(tmp_parent, exist_ok=True)
+
+    tmp_dir = tempfile.mkdtemp(dir=tmp_parent)
 except (PermissionError, FileExistsError) as e:
     logger.error(
         "Unable to create a temporary directory for test: {}".format(str(e)))

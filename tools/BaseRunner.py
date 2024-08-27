@@ -57,10 +57,14 @@ class BaseRunner:
         self.allowed_extensions = ['.v', '.sv', '.vh', '.svh']
 
         self.url = "https://github.com/symbiflow/sv-tests"
+        self.submodule = ""
 
-    def get_mode(self, test_features, compatible_runners):
+    def get_mode(self, params):
         """Determine correct run mode or return None when incompatible
         """
+        test_features = params['type'].split()
+        compatible_runners = params['compatible-runners'].split()
+
         if "all" not in compatible_runners:
             if self.name not in compatible_runners:
                 return None
@@ -68,7 +72,8 @@ class BaseRunner:
         # select the first mode from the list that matches both the runner and
         # the test
         modes_sorted = [
-            'simulation', 'elaboration', 'parsing', 'preprocessing'
+            'simulation', 'simulation_without_run', 'elaboration', 'parsing',
+            'preprocessing'
         ]
 
         for m in modes_sorted:
@@ -201,6 +206,32 @@ class BaseRunner:
             return log.decode('utf-8')
         except (TypeError, NameError, OSError):
             return self.name
+
+    def get_commit(self):
+        """Attempt to get the commit hash of the tool. The result is based on
+        the latest commit of its corresponding sumbodule.
+
+        Returns a hash string
+        """
+
+        try:
+            path = "HEAD"
+            if self.submodule:
+                path += ":" + self.submodule
+
+            cmd = ["git", "rev-parse", path]
+
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+            log, _ = proc.communicate()
+
+            if proc.returncode != 0:
+                return "HEAD"
+
+            return log.decode('utf-8').strip()
+        except (TypeError, NameError, OSError):
+            return "HEAD"
 
     def get_url(self):
         """Get the URL to the homepage of the runner

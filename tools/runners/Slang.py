@@ -13,12 +13,17 @@ from BaseRunner import BaseRunner
 
 
 class Slang(BaseRunner):
-    def __init__(self):
+    def __init__(
+            self,
+            name="slang",
+            supported_features={'preprocessing', 'parsing', 'elaboration'}):
         super().__init__(
-            "slang", "slang-driver",
-            {'preprocessing', 'parsing', 'elaboration'})
+            name,
+            executable="slang-driver",
+            supported_features=supported_features)
 
-        self.url = "https://github.com/MikePopoloski/slang"
+        self.submodule = "third_party/tools/slang"
+        self.url = f"https://github.com/MikePopoloski/slang/tree/{self.get_commit()}"
 
     def prepare_run_cb(self, tmp_dir, params):
         mode = params['mode']
@@ -33,6 +38,10 @@ class Slang(BaseRunner):
         # a single compilation unit, so ask slang to do that.
         self.cmd += ['--single-unit']
 
+        # Set a default timescale so we don't get errors about some
+        # modules not having one.
+        self.cmd += ['--timescale=1ns/1ns']
+
         top = params['top_module'].strip()
         if top:
             self.cmd.append('--top=' + top)
@@ -43,6 +52,11 @@ class Slang(BaseRunner):
         for define in params['defines']:
             self.cmd.extend(['-D', define])
 
+        # Some tests access array elements out of bounds. Make that not an error.
+        self.cmd.append("-Wno-error=index-oob")
+        self.cmd.append("-Wno-error=range-oob")
+        self.cmd.append("-Wno-error=range-width-oob")
+
         tags = params["tags"]
 
         # The Ariane core does not build correctly if VERILATOR is not defined -- it will attempt
@@ -50,17 +64,27 @@ class Slang(BaseRunner):
         if "ariane" in tags:
             self.cmd.append("-DVERILATOR")
 
+        # The earlgrey core requires non-standard functionality, so enable VCS compat.
+        if "earlgrey" in tags:
+            self.cmd.append("--compat=vcs")
+
         # black-parrot has syntax errors where variables are used before they are declared.
         # This is being fixed upstream, but it might take a long time to make it to master
         # so this works around the problem in the meantime.
-        if "black-parrot" in tags:
+        if "black-parrot" in tags and mode != "parsing":
             self.cmd.append("--allow-use-before-declare")
 
-            # These two tests simply cannot be elaborated because they target
-            # modules that have invalid parameter values for a top-level module.
+            # These tests simply cannot be elaborated because they target
+            # modules that have invalid parameter values for a top-level module,
+            # or have an invalid configuration that results in $fatal calls.
             name = params["name"]
-            if 'bp_lce' in name or 'bp_uce' in name:
+            if 'bp_lce' in name or 'bp_uce' or 'bp_multicore' in name:
                 self.cmd.append("--parse-only")
+
+        # These cores use a non-standard extension to write to the same variable
+        # from multiple procedures.
+        if "earlgrey" in tags or "fx68k" in tags:
+            self.cmd.append("--allow-dup-initial-drivers")
 
         self.cmd += params['files']
 

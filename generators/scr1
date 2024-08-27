@@ -19,6 +19,7 @@ templ = """/*
 :incdirs: {1}
 :tags: scr1
 :top_module: scr1_top_tb_axi
+:results_group: cores
 :timeout: 100
 */
 """
@@ -46,7 +47,7 @@ sources = ''
 incdirs = ''
 
 files = []
-includes = ['includes']
+includes = ['includes', 'tb']
 
 for fname in flist:
     with open(os.path.join(scr1_path, fname)) as f:

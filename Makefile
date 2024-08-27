@@ -50,6 +50,12 @@ endif
 
 runners:
 
+ifneq ($(RUNNER_KEEP_TMP),)
+RUNNER_PARAM := --keep-tmp
+else
+RUNNER_PARAM := --quiet
+endif
+
 # $(1) - runner name
 # $(2) - test
 define runner_test_gen
@@ -59,12 +65,6 @@ ifneq ($(USE_CGROUP),)
 $(OUT_DIR)/logs/$(1)/$(2).log : RUNNER = cgexec -g memory,cpu:$(USE_CGROUP)/$(1) ./tools/runner
 else
 $(OUT_DIR)/logs/$(1)/$(2).log : RUNNER = ./tools/runner
-endif
-
-ifneq ($(RUNNER_KEEP_TMP),)
-RUNNER_PARAM := --keep-tmp
-else
-RUNNER_PARAM := --quiet
 endif
 
 $(OUT_DIR)/logs/$(1)/$(2).log: $(TESTS_DIR)/$(2) | $(1)-cg
@@ -162,6 +162,11 @@ report: init tests versions urls
 	./tools/sv-report --revision $(shell git rev-parse --short HEAD)
 	cp $(CONF_DIR)/report/*.css $(OUT_DIR)/report/
 	cp $(CONF_DIR)/report/*.js $(OUT_DIR)/report/
+	cp $(CONF_DIR)/report/*.png $(OUT_DIR)/report/
+	cp $(CONF_DIR)/report/*.svg $(OUT_DIR)/report/
+
+list-generators:
+	@echo $(GENERATORS)
 
 $(foreach g, $(GENERATORS), $(eval $(call generator_gen,$(g))))
 $(foreach r, $(RUNNERS),$(foreach t, $(TESTS),$(eval $(call runner_test_gen,$(r),$(t)))))

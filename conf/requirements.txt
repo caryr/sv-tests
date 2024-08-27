@@ -1,6 +1,6 @@
 pyyaml
 jinja2
-tree_sitter==0.2.2
+tree_sitter==0.20.4
 pygments
 yapf==0.30.0
 psutil
@@ -9,4 +9,6 @@ make_var
 markupsafe
 pytablewriter
 GitPython
+git+https://github.com/lowRISC/edalize.git@ot
 git+https://github.com/lowRISC/fusesoc.git@ot
+orderedmultidict

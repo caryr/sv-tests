@@ -10,11 +10,14 @@
 /*
 :name: if_else_production_statements_2
 :description: randcase if-else test
+:type: simulation elaboration parsing
 :tags: 18.17.2
+:unsynthesizable: 1
 */
 
 function int F();
-    int x, switch;
+    int x;
+    int switch = 1;
     randsequence( main )
       main : first;
       first : if(switch) second else third;
@@ -23,3 +26,11 @@ function int F();
     endsequence
     return x;
 endfunction
+
+module top;
+   int x;
+   initial begin
+      x = F();
+      $display(":assert: (10 == %d)", x);
+   end
+endmodule

@@ -8,9 +8,11 @@ on:
 
 jobs:
   Comment:
+    permissions:
+      pull-requests: write
     name: Comment
-    runs-on: [self-hosted, Linux, X64]
-    container: ubuntu:latest
+    runs-on: [self-hosted, Linux, X64, gcp-custom-runners]
+    container: ubuntu:jammy-20221130
     if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Install dependencies
@@ -53,6 +55,10 @@ jobs:
           ARTIFACT_URL="https://github.com/chipsalliance/sv-tests/suites/$SUITE_ID/artifacts/$ARTIFACT_ID"
           MD_URL="[Download an archive containing all the details]($ARTIFACT_URL)"
           echo -e "\n\n$MD_URL" >> tests_summary.md
+
+      - name: Show summary
+        run: |
+          cat tests_summary.md > $GITHUB_STEP_SUMMARY
 
       - name: Prepare comment
         id: get-comment-body
