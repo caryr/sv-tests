@@ -8,10 +8,11 @@
 
 
 /*
-:name: uvm_files
-:description: basic UVM test
-:tags: uvm
-:timeout: 300
-:unsynthesizable: 1
+:name: module_definition
+:description: module w/ named end test
+:tags: 23.2
+:type: simulation elaboration parsing
 */
+module top();
 
+endmodule : top

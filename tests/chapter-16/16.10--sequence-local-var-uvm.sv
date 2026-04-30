@@ -12,7 +12,7 @@
 :description: sequence with local variables in UVM
 :type: simulation elaboration parsing
 :tags: uvm uvm-assertions
-:timeout: 60
+:timeout: 300
 :unsynthesizable: 1
 */
 
@@ -112,7 +112,7 @@ module top();
     assign dif.in = cycle;
 
     always @(posedge dif.clk)
-        cycle = cycle + 1;
+        cycle <= cycle + 1;
 
     initial begin
         forever begin

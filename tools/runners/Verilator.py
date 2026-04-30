@@ -42,19 +42,26 @@ class Verilator(BaseRunner):
         self.cmd.append('--timing')
 
         if mode in ['simulation', 'simulation_without_run']:
-            self.cmd += ['--cc']
+            self.cmd += ['--binary']
         elif mode == 'preprocessing':
             self.cmd += ['-P', '-E']
         else:  # parsing and elaboration
             self.cmd += ['--lint-only']
 
+        # Allow UVM builds within reasonable timeout
+        self.cmd += ['--build-jobs', '0']
+        # Disable compiler optimization as build time exceeds test runtime
+        self.cmd += ['-CFLAGS', '-O0']
+
         self.cmd += ['-Wno-fatal', '-Wno-UNOPTFLAT', '-Wno-BLKANDNBLK']
         # Flags for compliance testing:
         self.cmd += ['-Wpedantic', '-Wno-context']
 
-        top = self.get_top_module_or_guess(params)
-        if top is not None:
-            self.cmd += ['--top-module', top]
+        if params['top_module'] != '':
+            self.cmd += ['--top-module', params['top_module']]
+            top = params['top_module']
+        else:
+            top = 'top'
 
         # top is None only if the test contains no module
         # if that test would be run with simulation related options
@@ -65,25 +72,15 @@ class Verilator(BaseRunner):
         for incdir in params['incdirs']:
             self.cmd.append('-I' + incdir)
 
-        is_simple_test = False
-        if all(os.path.splitext(filename)[1] not in self.c_extensions
-               for filename in params['files']):
-            # Test doesn't contain any c related file,
-            # but one is required for the simulation.
-            # We need to provide file with main function
-            # and change the build_name to match with include in this file
-            is_simple_test = True
-            build_name = 'Vtop'
+        # No tests require UVM DPI, and we don't currently have a nice
+        # way of knowing when it is needed to put it on the command line.
+        # Also avoids compile time of the DPI C code.
+        self.cmd.append('-DUVM_NO_DPI')
 
         if mode in ['simulation', 'simulation_without_run']:
             self.cmd += [
-                '--Mdir', build_dir, '--prefix', build_name, '--exe', '-o',
-                build_name
+                '--Mdir', build_dir, '--prefix', build_name, '-o', build_name
             ]
-            if is_simple_test:
-                shutil.copy(
-                    os.path.join(conf, 'runners', 'vmain.cpp'), tmp_dir)
-                self.cmd.append('vmain.cpp')
 
         if 'runner_verilator_flags' in params:
             self.cmd += shlex.split(params['runner_verilator_flags'])
@@ -96,7 +93,5 @@ class Verilator(BaseRunner):
         with open(scr, 'w') as f:
             f.write('set -x\n')
             f.write('{0} "$@" || exit $?\n'.format(self.executable))
-            if mode in ['simulation', 'simulation_without_run']:
-                f.write(f'make -C {build_dir} -f {build_name}.mk\n')
             if mode == 'simulation':
-                f.write(f'./{build_dir}/{build_name}')
+                f.write(f'./{build_dir}/{build_name}\n')

@@ -59,14 +59,17 @@ class Slang(BaseRunner):
 
         tags = params["tags"]
 
-        # The Ariane core does not build correctly if VERILATOR is not defined -- it will attempt
-        # to reference nonexistent modules, for example.
-        if "ariane" in tags:
-            self.cmd.append("-DVERILATOR")
+        # The Ariane and Ibex cores have duplicate definitions.
+        if "ariane" in tags or "ibex" in tags:
+            self.cmd.append("-Wno-duplicate-definition")
 
-        # The earlgrey core requires non-standard functionality, so enable VCS compat.
-        if "earlgrey" in tags:
-            self.cmd.append("--compat=vcs")
+        # Ibex includes files that try to instantiate Xilinx-specific modules
+        if "ibex" in tags:
+            self.cmd.append("--ignore-unknown-modules")
+
+        # The Ariane core has syntax errors with stream concat operators.
+        if "ariane" in tags:
+            self.cmd.append("--allow-self-determined-stream-concat")
 
         # black-parrot has syntax errors where variables are used before they are declared.
         # This is being fixed upstream, but it might take a long time to make it to master
@@ -83,7 +86,7 @@ class Slang(BaseRunner):
 
         # These cores use a non-standard extension to write to the same variable
         # from multiple procedures.
-        if "earlgrey" in tags or "fx68k" in tags:
+        if "fx68k" in tags:
             self.cmd.append("--allow-dup-initial-drivers")
 
         self.cmd += params['files']

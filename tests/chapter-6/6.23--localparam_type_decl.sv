@@ -8,10 +8,14 @@
 
 
 /*
-:name: uvm_files
-:description: basic UVM test
-:tags: uvm
-:timeout: 300
-:unsynthesizable: 1
+:name: localparam_type_decl
+:description: Declare a type with a localparam
+:tags: 6.23
 */
+module top ;
 
+localparam type testtype = logic;
+
+testtype t;
+
+endmodule

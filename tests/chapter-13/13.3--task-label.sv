@@ -8,10 +8,18 @@
 
 
 /*
-:name: uvm_files
-:description: basic UVM test
-:tags: uvm
-:timeout: 300
-:unsynthesizable: 1
+:name: task-label
+:description: test w/ named end test
+:tags: 13.3
+:type: simulation elaboration parsing
 */
+module top();
 
+  task mytask;
+    $display(":assert: True");
+  endtask : mytask
+
+  initial
+    mytask;
+
+endmodule

@@ -12,7 +12,7 @@
 :description: sequence with "changed" task in UVM
 :type: simulation elaboration parsing
 :tags: uvm uvm-assertions
-:timeout: 60
+:timeout: 300
 :unsynthesizable: 1
 */
 
@@ -103,7 +103,7 @@ module top();
     assert property (seq) else `uvm_info(label, $sformatf("$changed(dif.out) failed :assert: (%d != 8)", cycle), UVM_LOW);
 
     always @(posedge dif.clk)
-        cycle = cycle + 1;
+        cycle <= cycle + 1;
 
     initial begin
         forever begin

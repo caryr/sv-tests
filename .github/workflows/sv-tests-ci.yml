@@ -5,6 +5,7 @@ on:
     branches:
       - master
   pull_request:
+  workflow_dispatch:
   schedule:
     - cron: '0 1 * * *' # run daily at 01:00 am (UTC)
 
@@ -29,20 +30,17 @@ jobs:
             deps: cmake default-jre pkg-config tclsh uuid-dev
           - name: sv-parser
             deps: cargo
-            rust_ver: "1.74"
+            rust_ver: "1.94"
           - name: tree-sitter-systemverilog
             deps: gcc
           - name: tree-sitter-verilog
-            deps: npm
+            deps: gcc
           - name: verible
-            deps: bazel=5.4.0 bison flex libfl-dev
+            deps: bazel=7.6.1 bison flex libfl-dev
             skip-ccache: 1
           - name: verilator
             deps: autoconf autotools-dev bison flex help2man libfl-dev libelf-dev
-          - name: verilator-uhdm
-            submodules: Surelog vcddiff
-            deps: autoconf autotools-dev bison default-jre flex help2man libfl-dev cmake pkg-config tclsh uuid-dev libelf-dev
-            runners_filter: UhdmVerilator
+            make_jobs_max: 4
           - name: yosys
             deps: bison clang tcl-dev flex libfl-dev pkg-config libreadline-dev
           - name: yosys-synlig
@@ -83,6 +81,14 @@ jobs:
       - name: Update apt repos
         run: |
           apt-get update -qq
+      - name: Setup Node
+        run: |
+          apt -qq -y install curl
+          touch "$HOME/.bash_profile"
+          # From https://nodejs.org/en/download
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
+          . "$HOME/.nvm/nvm.sh"
+          nvm install 22
       - name: Add bazel repo (if needed)
         if: ${{ contains(matrix.tool.deps, 'bazel') }}
         run: |
@@ -94,10 +100,11 @@ jobs:
           apt-get update -qq
       - name: Install common dependencies
         run: |
-          apt install -y python3 python3-pip git wget
+          apt install -y python3 python3-pip git wget file
           update-alternatives --install /usr/bin/python python /usr/bin/python3 1
           update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
-          pip install -r conf/requirements.txt
+          pip install --use-pep517 --upgrade setuptools
+          pip install --use-pep517 -r conf/requirements.txt
       - name: Install VeeR dependencies
         run: |
           apt install -y cpanminus
@@ -128,25 +135,30 @@ jobs:
           # Github dropped support for unauthorized git: https://github.blog/2021-09-01-improving-git-protocol-security-github/
           # Make sure we always use https:// instead of git://
           git config --global url.https://github.com/.insteadOf git://github.com/
+          # take verilator from github (some tested tools still use a submodule
+          # from veripool)
+          git config --global url."https://github.com/verilator/verilator".insteadOf http://git.veripool.org/git/verilator
           REPOSITORY_NAME=${{ matrix.tool.name }}
           if [[ ! -z "${{ matrix.tool.repo }}" ]]; then
             REPOSITORY_NAME=${{ matrix.tool.repo }}
           fi
-          git submodule update --init third_party/tools/${REPOSITORY_NAME}
+          git submodule update --init --depth 1 third_party/tools/${REPOSITORY_NAME}
           if [[ ! -z "${{ matrix.tool.submodules }}" ]]; then
             pushd third_party/tools/${REPOSITORY_NAME}
-            git submodule update --init --recursive ${{ matrix.tool.submodules }}
+            git submodule update --init --recursive --depth 1 ${{ matrix.tool.submodules }}
             popd
           fi
           # yosys tool contains tests, is a dependency of other tools
-          git submodule update --init --recursive third_party/tools/yosys
+          git submodule update --init --recursive --depth 1 third_party/tools/yosys
+          # icarus contains tests
+          git submodule update --init --depth 1 third_party/tools/icarus
       - name: Create Cache Timestamp
         id: cache_timestamp
         uses: nanzm/get-time-action@v1.1
         with:
           format: 'YYYY-MM-DD-HH-mm-ss'
       - name: Setup cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         timeout-minutes: 3
         continue-on-error: true
         with:
@@ -157,21 +169,24 @@ jobs:
         run: |
           export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           [[ -f $HOME/.cargo/env ]] && source $HOME/.cargo/env
+          . "$HOME/.bash_profile"  # GitHub Actions runs bash with --noprofile
           make ${{ matrix.tool.name }} -j$(nproc)
       - name: Check
         run:
           make info
       - name: Checkout third party tests and cores
         run: |
-          git submodule update --init --recursive third_party/tests
-          git submodule update --init --recursive third_party/cores
+          git submodule update --init --recursive --depth 1 third_party/tests
+          git submodule update --init --recursive --depth 1 third_party/cores
       - name: Run
         run: |
           BIG_GENERATORS_EXPR=$(echo $BIG_GENERATORS | sed 's/ /\\|/g')
           export STABLE_GENERATORS=$(make list-generators | tr ' ' '\n' | grep -v "${BIG_GENERATORS_EXPR}")
           export UNSTABLE_GENERATORS=$(make list-generators | tr ' ' '\n' | grep "${BIG_GENERATORS_EXPR}")
-          for gen in ${STABLE_GENERATORS}; do make generate-$gen -j$(nproc); make -j$(nproc); done
-          for gen in ${UNSTABLE_GENERATORS}; do make generate-$gen; make; done
+          export JOBS=${{ matrix.tool.make_jobs_max }}
+          if [[ "${JOBS}x" == "x" ]]; then export JOBS=$(nproc); fi
+          for gen in ${STABLE_GENERATORS}; do echo "==GEN stable $gen -j $JOBS" ; make generate-$gen -j${JOBS}; make -j ${JOBS}; done
+          for gen in ${UNSTABLE_GENERATORS}; do echo "==GEN unstable $gen" ; make generate-$gen; make; done
       - name: Prepare Report
         run:
           mv out/report/report.csv out/report/${{ matrix.tool.name }}_report.csv
@@ -210,7 +225,12 @@ jobs:
           apt install -y python3 python3-pip wget git curl jq
           update-alternatives --install /usr/bin/python python /usr/bin/python3 1
           update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
-          pip install -r conf/requirements.txt
+          pip install --use-pep517 --upgrade setuptools
+          pip install --use-pep517 -r conf/requirements.txt
+      - name: Install VeeR dependencies
+        run: |
+          apt install -y cpanminus
+          cpanm Bit::Vector JSON
       - name: Prepare output directories
         run: |
           mkdir -p out/report
@@ -222,10 +242,14 @@ jobs:
           for file in $(find out/ -name *.tar -print); do tar -xf $file --strip-components=2 -C $(dirname $file); done
       - name: Checkout third party tests and cores
         run: |
-          git submodule update --init --recursive third_party/tests
-          git submodule update --init --recursive third_party/cores
+          # take verilator from github
+          git config --global url."https://github.com/verilator/verilator".insteadOf http://git.veripool.org/git/verilator
+          git submodule update --init --recursive --depth 1 third_party/tests
+          git submodule update --init --recursive --depth 1 third_party/cores
           # yosys tool also contains tests
-          git submodule update --init --recursive third_party/tools/yosys
+          git submodule update --init --recursive --depth 1 third_party/tools/yosys
+          # icarus contains tests
+          git submodule update --init --depth 1 third_party/tools/icarus
       - name: Summary
         run: |
           ./.github/workflows/summary.sh
@@ -244,9 +268,6 @@ jobs:
         run: |
           mkdir $TESTS_SUMMARY_DIR
           echo ${{ github.event.number }} > $TESTS_SUMMARY_DIR/issue_num
-          SUITE_INFO=`curl -s https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
-          SUITE_ID=`echo $SUITE_INFO | jq -r '.check_suite_id'`
-          echo $SUITE_ID > $TESTS_SUMMARY_DIR/suite_id
           cp $COMPARE_REPORT $TESTS_SUMMARY_DIR/report_base.csv
           cp $OUT_REPORT_DIR/report.csv $TESTS_SUMMARY_DIR/report_new.csv
           cp $OUT_REPORT_DIR/new_*csv $TESTS_SUMMARY_DIR
@@ -274,7 +295,7 @@ jobs:
           artifacts="${artifacts//'%'/'%25'}"
           artifacts="${artifacts//$'\n'/'%0A'}"
           artifacts="${artifacts//$'\r'/'%0D'}"
-          echo ::set-output name=artifacts::$artifacts
+          echo "artifacts=$artifacts" >> GITHUB_OUTPUT
           echo $artifacts
       - name: Delete Old Artifacts
         if: github.event_name == 'pull_request'

@@ -12,6 +12,12 @@ RDIR := $(abspath third_party/tools)
 TDIR := $(abspath tools)
 CDIR := $(abspath conf)
 
+TREE_SITTER_SVERILOG_PARSER_DIR := $(abspath $(OUT_DIR)/tmp/tree-sitter-systemverilog/parser)
+TREE_SITTER_VERILOG_PARSER_DIR := $(abspath $(OUT_DIR)/tmp/tree-sitter-verilog/parser)
+
+export TREE_SITTER_SVERILOG_PARSER_DIR
+export TREE_SITTER_VERILOG_PARSER_DIR
+
 .PHONY: runners
 
 runners:
@@ -72,32 +78,24 @@ $(INSTALL_DIR)/bin/zachjs-sv2v:
 	$(MAKE) -C $(RDIR)/zachjs-sv2v
 	install -D $(RDIR)/zachjs-sv2v/bin/sv2v $@
 
-# tree-sitter-verilog
-tree-sitter-verilog: $(INSTALL_DIR)/lib/tree-sitter-verilog.so
+# tree-sitter-verilog & tree-sitter-systemverilog
+tree-sitter-systemverilog: $(INSTALL_DIR)/bin/tree-sitter
+	(export PATH=$(INSTALL_DIR)/bin/:${PATH} && \
+		cd $(RDIR)/tree-sitter-systemverilog && tree-sitter generate)
+	mkdir -p $(abspath $(OUT_DIR)/tmp/tree-sitter-systemverilog)
+	mv $(RDIR)/tree-sitter-systemverilog/src $(TREE_SITTER_SVERILOG_PARSER_DIR)
 
-$(INSTALL_DIR)/lib/tree-sitter-verilog.so:
-	mkdir -p $(INSTALL_DIR)/lib
-	cd $(RDIR)/tree-sitter-verilog && npm install
-	/usr/bin/env python3 -c "from tree_sitter import Language; Language.build_library(\"$@\", [\"$(abspath $(RDIR)/tree-sitter-verilog)\"])"
+tree-sitter-verilog: $(INSTALL_DIR)/bin/tree-sitter
+	(export PATH=$(INSTALL_DIR)/bin/:${PATH} && \
+		cd $(RDIR)/tree-sitter-verilog && tree-sitter generate)
+	mkdir -p $(abspath $(OUT_DIR)/tmp/tree-sitter-verilog)
+	mv $(RDIR)/tree-sitter-verilog/src $(TREE_SITTER_VERILOG_PARSER_DIR)
 
-# tree-sitter-systemverilog
-tree-sitter-systemverilog: $(INSTALL_DIR)/lib/tree-sitter-systemverilog.so
-
-$(INSTALL_DIR)/lib/tree-sitter-systemverilog.so:
-	mkdir -p $(INSTALL_DIR)/lib
-	cd $(RDIR)/tree-sitter-systemverilog && \
-		cc -fPIC -c -I. src/parser.c && \
-		cc -fPIC -shared *.o -o $@
-
-# surelog-uhdm-verilator
-verilator-uhdm: $(INSTALL_DIR)/bin/verilator-uhdm
-
-# cannot use 'make -C uhdm-integration <target> as uhdm relies on $PWD
-$(INSTALL_DIR)/bin/verilator-uhdm:
-	mkdir -p $(INSTALL_DIR)
-	cd $(RDIR)/verilator-uhdm && ./build_binaries.sh
-	cp -r $(RDIR)/verilator-uhdm/image/* $(INSTALL_DIR)
-	mv $(INSTALL_DIR)/bin/verilator $(INSTALL_DIR)/bin/verilator-uhdm
+$(INSTALL_DIR)/bin/tree-sitter:
+	wget https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.3/tree-sitter-linux-x64.gz
+	gunzip tree-sitter-linux-x64.gz
+	install -D tree-sitter-linux-x64 $@
+	rm tree-sitter-linux-x64
 
 # yosys-synlig
 yosys-synlig: $(INSTALL_DIR)/bin/yosys-synlig
@@ -128,7 +126,9 @@ $(RDIR)/moore/Cargo.lock: $(CDIR)/runners/Cargo.lock
 
 # verible
 verible:
-	cd $(RDIR)/verible/ && bazel run :install --noshow_progress --//bazel:use_local_flex_bison -c opt -- $(INSTALL_DIR)/bin && bazel shutdown
+	cd $(RDIR)/verible/ && bazel build :install-binaries --noshow_progress --//bazel:use_local_flex_bison -c opt
+	cd $(RDIR)/verible/ && .github/bin/simple-install.sh $(INSTALL_DIR)/bin
+	cd $(RDIR)/verible/ && bazel shutdown
 
 $(INSTALL_DIR)/bin/verible-verilog-kythe-extractor: verible
 
@@ -154,34 +154,17 @@ $(INSTALL_DIR)/bin/yosys-slang: $(INSTALL_DIR)/bin/slang-yosys-config
 circt-verilog: $(INSTALL_DIR)/bin/circt-verilog
 
 $(INSTALL_DIR)/bin/circt-verilog:
-	mkdir -p $(RDIR)/circt-verilog/build && \
-	mkdir -p $(RDIR)/circt-verilog/llvm/build && \
-	cd $(RDIR)/circt-verilog/llvm/build && \
-	cmake ../llvm \
-	    -G Ninja \
-	    -DCMAKE_BUILD_TYPE=Release \
-	    -DLLVM_USE_LINKER=lld \
-	    -DLLVM_CCACHE_BUILD=ON \
-	    -DCMAKE_C_COMPILER=clang \
-	    -DCMAKE_CXX_COMPILER=clang++ \
-	    -DLLVM_ENABLE_PROJECTS="mlir" \
-	    -DLLVM_INSTALL_UTILS=ON \
-	    -DLLVM_OPTIMIZED_TABLEGEN=ON \
-	    -DLLVM_TARGETS_TO_BUILD="host" && \
-	ninja && cd $(RDIR)/circt-verilog/build && \
-	cmake .. \
-	    -G Ninja \
-	    -DCMAKE_BUILD_TYPE=Release \
-	    -DLLVM_USE_LINKER=lld \
-	    -DCMAKE_C_COMPILER=clang \
-	    -DCMAKE_CXX_COMPILER=clang++ \
-	    -DMLIR_DIR=$(RDIR)/circt-verilog/llvm/build/lib/cmake/mlir \
-	    -DLLVM_DIR=$(RDIR)/circt-verilog/llvm/build/lib/cmake/llvm \
-	    -DCIRCT_SLANG_FRONTEND_ENABLED=ON \
-	    -DCMAKE_INSTALL_PREFIX=$(INSTALL_DIR) && \
-	ninja && ninja install
+	cd $(RDIR)/circt-verilog && cmake llvm/llvm -B build \
+		-DCMAKE_INSTALL_PREFIX=$(INSTALL_DIR) \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DLLVM_TARGETS_TO_BUILD=host \
+		-DLLVM_ENABLE_PROJECTS=mlir \
+		-DLLVM_EXTERNAL_PROJECTS=circt \
+		-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$(RDIR)/circt-verilog \
+		-DCIRCT_SLANG_FRONTEND_ENABLED=ON
+	$(MAKE) -C $(RDIR)/circt-verilog/build install-circt-verilog
 
 # setup the dependencies
-RUNNERS_TARGETS := odin yosys icarus verilator slang zachjs-sv2v tree-sitter-systemverilog tree-sitter-verilog sv-parser moore verible surelog yosys-synlig verilator-uhdm circt-verilog
+RUNNERS_TARGETS := odin yosys icarus verilator slang zachjs-sv2v tree-sitter-systemverilog tree-sitter-verilog sv-parser moore verible surelog yosys-synlig circt-verilog
 .PHONY: $(RUNNERS_TARGETS)
 runners: $(RUNNERS_TARGETS)

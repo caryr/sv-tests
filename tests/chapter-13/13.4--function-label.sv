@@ -8,18 +8,18 @@
 
 
 /*
-:name: preproc_test_2
-:description: Test
-:tags: 5.6.4
-:type: preprocessing
+:name: function
+:description: function w/ named end test
+:tags: 13.4
+:type: simulation elaboration parsing
 */
-`include "preproc_test_2.svh"
-`ifndef SUCCESS
-"Didn't successfully include preproc_test_2.svh!"
-`endif
-`ifndef SANITY
-`define SANITY
-`endif
+module top();
 
-module test;
+  function int test(int val);
+    return val + 1;
+  endfunction : test
+
+  initial
+    $display(":assert: (%d == 2)", test(1));
+
 endmodule
